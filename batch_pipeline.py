@@ -25,7 +25,6 @@ def read_csv_file(file_path):
 
 class FilterFlightDataDoFn(beam.DoFn):
     def process(self, element):
-        
         filtered_element = {
             'passenger_id': element['Passenger ID'],
             'age': element['Age'],
@@ -36,10 +35,16 @@ class FilterFlightDataDoFn(beam.DoFn):
         return([filtered_element])
 
     def sanitize_date_field(self, date_value):
+        if '/' in date_value:
+            date_format = '%m/%d/%Y'
+        else:
+            date_format = '%m-%d-%Y'
+
         try:
-            filtered_date = datetime.strptime(date_value, '%m/%d/%Y')
+            filtered_date = datetime.strptime(date_value, date_format)
         except:
             return False
+
         return filtered_date
 
 
