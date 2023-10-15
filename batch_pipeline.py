@@ -23,29 +23,34 @@ def read_csv_file(file_path):
     for row in csv.DictReader(codecs.iterdecode(infile, "utf-8")):
         yield row
 
+
+def convert_str_to_date(date_value):
+    if '/' in date_value:
+        date_format = '%m/%d/%Y'
+    else:
+        date_format = '%m-%d-%Y'
+
+    return datetime.strptime(date_value, date_format)
+
+
 class FilterFlightDataDoFn(beam.DoFn):
-    def process(self, element):
+    def process(self, element, convert_date):
         filtered_element = {
             'passenger_id': element['Passenger ID'],
             'age': element['Age'],
-            'departure_date': self.sanitize_date_field(element['Departure Date']),
+            'departure_date': convert_date(element['Departure Date']),
             'arrival_airport': element['Arrival Airport'],
             'flight_status': element['Flight Status']
         }
         return([filtered_element])
 
-    def sanitize_date_field(self, date_value):
-        if '/' in date_value:
-            date_format = '%m/%d/%Y'
+
+class FlightsByDateDoFn(beam.DoFn):
+    def process(self, element, start_date, end_date):
+        if element['departure_date'] >= start_date and element['departure_date'] <= end_date:
+            return([element])
         else:
-            date_format = '%m-%d-%Y'
-
-        try:
-            filtered_date = datetime.strptime(date_value, date_format)
-        except:
-            return False
-
-        return filtered_date
+            return([])
 
 
 def run(argv=None, save_main_session=True):
@@ -65,25 +70,29 @@ def run(argv=None, save_main_session=True):
     # Validating the --start and --end command line arguments provided from the user is left as a future enhancement
     parser.add_argument(
       '--start',
-      dest='start_date',
-      default='',
-      required=True,
-      help='Date range cannot start earlier than Dec 31, 2021 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')
+      dest='start',
+      default='09/01/2022',
+      help='Date range cannot start earlier than Jan 1, 2022 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')
     parser.add_argument(
       '--end',
-      dest='end_date',
-      required=True,
-      help='Date range cannot end after Dec 29, 2022 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')
+      dest='end',
+      default='12/29/2022',
+      help='Date range cannot end after Dec 30, 2022 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')
     known_args, pipeline_args = parser.parse_known_args(argv)
     pipeline_options = PipelineOptions(pipeline_args)
     pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
+
+    start_date = convert_str_to_date(known_args.start)
+    end_date = convert_str_to_date(known_args.end)
 
     # Start moving data through beam pipeline
     with beam.Pipeline(options=pipeline_options) as p:
         rows = p | 'ReadCSV' >> beam.Create(read_csv_file(known_args.input))
         output = (
             rows 
-                | 'FilterFlightData' >> beam.ParDo(FilterFlightDataDoFn())
+                # Map Section            
+                | 'FilterFlightData' >> beam.ParDo(FilterFlightDataDoFn(), convert_str_to_date)
+                | 'FlightsByDate' >> beam.ParDo(FlightsByDateDoFn(), start_date, end_date)
             )
 
         output | 'Write' >> WriteToText(known_args.output)
