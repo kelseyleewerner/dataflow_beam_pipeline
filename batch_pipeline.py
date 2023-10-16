@@ -36,7 +36,6 @@ def convert_str_to_date(date_value):
 class FilterFlightDataDoFn(beam.DoFn):
     def process(self, element, convert_date):
         filtered_element = {
-            'passenger_id': element['Passenger ID'],
             'age': element['Age'],
             'departure_date': convert_date(element['Departure Date']),
             'arrival_airport': element['Arrival Airport'],
@@ -90,9 +89,11 @@ def run(argv=None, save_main_session=True):
         rows = p | 'ReadCSV' >> beam.Create(read_csv_file(known_args.input))
         output = (
             rows 
-                # Map Section            
+                # Map Pipeline Section           
                 | 'FilterFlightData' >> beam.ParDo(FilterFlightDataDoFn(), convert_str_to_date)
                 | 'FlightsByDate' >> beam.ParDo(FlightsByDateDoFn(), start_date, end_date)
+                # Shuffle Pipeline Section
+                | 'GroupByFlightStatus' >> beam.GroupBy(lambda item: item['flight_status'])                
             )
 
         output | 'Write' >> WriteToText(known_args.output)
