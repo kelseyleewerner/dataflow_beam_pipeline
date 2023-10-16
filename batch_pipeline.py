@@ -36,11 +36,12 @@ def convert_str_to_date(date_value):
 class FilterFlightDataDoFn(beam.DoFn):
     def process(self, element, convert_date):
         filtered_element = {
-            'age': element['Age'],
+            'age': int(element['Age']),
             'departure_date': convert_date(element['Departure Date']),
             'arrival_airport': element['Arrival Airport'],
             'flight_status': element['Flight Status']
         }
+        
         return([filtered_element])
 
 
@@ -50,6 +51,39 @@ class FlightsByDateDoFn(beam.DoFn):
             return([element])
         else:
             return([])
+
+
+class CombineAgeAndArrAirportFn(beam.CombineFn):
+    def create_accumulator(self):
+        return {
+            'total_age': 0,
+            'age_count': 0
+        }
+
+    def add_input(self, accumulator, input):
+        accumulator['total_age'] += input['age']
+        accumulator['age_count'] += 1
+        
+        return accumulator
+
+    def merge_accumulators(self, accumulators):
+        merged = {
+            'total_age': 0,
+            'age_count': 0
+        }
+
+        for accum in accumulators:
+            merged['total_age'] += accum['total_age']
+            merged['age_count'] += accum['age_count']
+
+        return merged
+
+    def extract_output(self, accumulator):
+        results = {
+            'average_age': accumulator['total_age'] / accumulator['age_count']
+        }
+
+        return results
 
 
 def run(argv=None, save_main_session=True):
@@ -93,7 +127,9 @@ def run(argv=None, save_main_session=True):
                 | 'FilterFlightData' >> beam.ParDo(FilterFlightDataDoFn(), convert_str_to_date)
                 | 'FlightsByDate' >> beam.ParDo(FlightsByDateDoFn(), start_date, end_date)
                 # Shuffle Pipeline Section
-                | 'GroupByFlightStatus' >> beam.GroupBy(lambda item: item['flight_status'])                
+                | 'GroupByFlightStatus' >> beam.GroupBy(lambda item: item['flight_status'])
+                # Reduce Pipeline Section
+                | 'CombineAgeAndArrAirport' >> beam.CombineValues(CombineAgeAndArrAirportFn())
             )
 
         output | 'Write' >> WriteToText(known_args.output)
