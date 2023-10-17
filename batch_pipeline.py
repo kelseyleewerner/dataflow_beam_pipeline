@@ -57,30 +57,43 @@ class CombineAgeAndArrAirportFn(beam.CombineFn):
     def create_accumulator(self):
         return {
             'total_age': 0,
-            'age_count': 0
+            'age_count': 0,
+            'airport_codes': {}
         }
 
     def add_input(self, accumulator, input):
         accumulator['total_age'] += input['age']
         accumulator['age_count'] += 1
+        arrival_airport = input['arrival_airport']
         
+        if arrival_airport not in accumulator['airport_codes']:
+            accumulator['airport_codes'][arrival_airport] = 0
+        accumulator['airport_codes'][arrival_airport] += 1
+
         return accumulator
 
     def merge_accumulators(self, accumulators):
         merged = {
             'total_age': 0,
-            'age_count': 0
+            'age_count': 0,
+            'airport_codes': {}
         }
 
         for accum in accumulators:
             merged['total_age'] += accum['total_age']
             merged['age_count'] += accum['age_count']
+            
+            for arrival_airport, count in accum['airport_codes'].items():
+                if arrival_airport not in merged['airport_codes']:
+                    merged[arrival_airport] = 0
+                merged[arrival_airport] += count
 
         return merged
 
     def extract_output(self, accumulator):
         results = {
-            'average_age': accumulator['total_age'] / accumulator['age_count']
+            'average_age': accumulator['total_age'] / accumulator['age_count'],
+            'airport_codes': accumulator['airport_codes']
         }
 
         return results
