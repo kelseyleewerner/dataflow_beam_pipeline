@@ -85,8 +85,8 @@ class CombineAgeAndArrAirportFn(beam.CombineFn):
             
             for arrival_airport, count in accum['airport_codes'].items():
                 if arrival_airport not in merged['airport_codes']:
-                    merged[arrival_airport] = 0
-                merged[arrival_airport] += count
+                    merged['airport_codes'][arrival_airport] = 0
+                merged['airport_codes'][arrival_airport] += count
 
         return merged
 
