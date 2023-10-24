@@ -99,6 +99,58 @@ class CombineAgeAndArrAirportFn(beam.CombineFn):
         return results
 
 
+class CombineForGreatestArrAirportFn(beam.CombineFn):
+    def create_accumulator(self):
+        return {
+            'average_age': 0,
+            'greatest_airport_count': 0,
+            'airport_counts': {}
+        }      
+
+    def add_input(self, accumulator, input):
+        accumulator['average_age'] = input['average_age']
+
+        for arrival_airport, count in input['airport_codes'].items():
+            if count > accumulator['greatest_airport_count']:
+                accumulator['greatest_airport_count'] = count
+
+            if count not in accumulator['airport_counts']:
+                accumulator['airport_counts'][count] = []
+            accumulator['airport_counts'][count].append(arrival_airport)
+        
+        return accumulator
+
+    def merge_accumulators(self, accumulators):
+        merged = {
+            'average_age': 0,
+            'greatest_airport_count': 0,
+            'airport_counts': {}
+        }
+
+        # there should only be one accumulator but still writing this portion as if there could be multiple accumulators
+        for accum in accumulators:
+            merged['average_age'] = accum['average_age']
+            
+            if accum['greatest_airport_count'] > merged['greatest_airport_count']:
+                merged['greatest_airport_count'] = accum['greatest_airport_count']
+            
+            for count in accum['airport_counts'].keys():
+                if count not in merged['airport_counts']:
+                    merged['airport_counts'][count] = []
+                merged['airport_counts'][count] += accum['airport_counts'][count]
+
+        return merged
+
+    def extract_output(self, accumulator):
+        results = {
+            'average_age': accumulator['average_age'],
+            'most_common_airport_count': accumulator['greatest_airport_count'],
+            'most_common_airports': accumulator['airport_counts'][accumulator['greatest_airport_count']]
+        }
+
+        return results
+
+
 def run(argv=None, save_main_session=True):
     # Code for parsing command line arguments was copied from https://github.com/apache/beam/blob/master/sdks/python/apache_beam/examples/wordcount.py
     parser = argparse.ArgumentParser()
@@ -143,6 +195,7 @@ def run(argv=None, save_main_session=True):
                 | 'GroupByFlightStatus' >> beam.GroupBy(lambda item: item['flight_status'])
                 # Reduce Pipeline Section
                 | 'CombineAgeAndArrAirport' >> beam.CombineValues(CombineAgeAndArrAirportFn())
+                | 'CombineForGreatestArrAirport' >> beam.CombinePerKey(CombineForGreatestArrAirportFn())
             )
 
         output | 'Write' >> WriteToText(known_args.output)
