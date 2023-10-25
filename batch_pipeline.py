@@ -111,6 +111,10 @@ class CombineForGreatestArrAirportFn(beam.CombineFn):
         accumulator['average_age'] = input['average_age']
 
         for arrival_airport, count in input['airport_codes'].items():
+            # there is no airport with a code of '0', so any entries with this arrival airport code aren't included in the final count
+            if arrival_airport == '0':
+                continue
+
             if count > accumulator['greatest_airport_count']:
                 accumulator['greatest_airport_count'] = count
 
