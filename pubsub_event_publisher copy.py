@@ -1,6 +1,5 @@
 import argparse
 import csv
-import json
 from google.cloud import pubsub_v1
 
 
@@ -22,12 +21,12 @@ args = parser.parse_args()
 
 # Create PubSub publisher
 publisher = pubsub_v1.PublisherClient()
-topic_path = publisher.topic_path(project_id, topic)
+topic_name = F"projects/{args.project_id}/topics/{args.topic}"
 
 # Each line of the csv is publiished as a dictionary where the keys are the column names
 with open("horror_movies.csv", mode="r") as infile:
     messages = csv.DictReader(infile)
 
     for message in messages:
-        future = publisher.publish(topic_path, json.dumps(message).encode("utf-8"))
+        publisher.publish(args.topic, message.encode("utf-8"))
         future.result()
