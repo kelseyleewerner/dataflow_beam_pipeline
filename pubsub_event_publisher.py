@@ -32,4 +32,5 @@ with open(args.infile, mode="r") as infile:
 
     for message in messages:
         future = publisher.publish(topic_path, json.dumps(message).encode("utf-8"))
-        print(future.result())
+        # print(future.result())
+        future.result()
