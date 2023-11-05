@@ -1,7 +1,8 @@
 import argparse
 import apache_beam as beam
-from apache_beam.io import ReadFromPubSub, WriteToText
+from apache_beam.io import ReadFromPubSub
 from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions, StandardOptions
+from apache_beam.transforms import window
 
 
 
@@ -25,7 +26,14 @@ def run(argv=None, save_main_session=True):
     with beam.Pipeline(options=pipeline_options) as p:
         messages = (p | 'SubscribeToTopic' >> ReadFromPubSub(topic=known_args.input_topic).with_output_types(bytes))
 
-        output = messages | 'Decode' >> beam.Map(lambda x: x.decode('utf-8'))
+        output = (
+            messages
+                | 'DecodeInput' >> beam.Map(lambda x: x.decode('utf-8'))
+                | 'CreateWindows' >> beam.WindowInto(window.FixedWindows(15, 0))
+                | 'EncodeOutput' >> beam.Map(lambda x: x.encode('utf-8')).with_output_types(bytes)
+            )
+
+        output | 'PublishToTopic' >> beam.io.WriteToPubSub(known_args.output_topic)
 
 
 if __name__ == '__main__':
