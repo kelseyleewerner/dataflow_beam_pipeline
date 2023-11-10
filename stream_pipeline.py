@@ -53,8 +53,9 @@ def run(argv=None, save_main_session=True):
                 | 'CountMovies' >> beam.ParDo(countDoFn())               
                 | 'CreateWindows' >> beam.WindowInto(window.FixedWindows(15, 0))
                 # | 'CountMovies' >> beam.CombineGlobally(countFn())
-                | 'GroupByMysteryKey' >> beam.GroupByKey()
-                | 'MakeStrings' >> beam.Map(lambda x: json.dumps(x)) 
+                | 'GroupByKey' >> beam.GroupByKey()
+                | 'TotalMovies' >> beam.Map(lambda x: {x[0]: len(x[1])})                
+                | 'MakeStrings' >> beam.Map(lambda x: json.dumps(x))
                 | 'EncodeOutput' >> beam.Map(lambda x: x.encode('utf-8')).with_output_types(bytes)
             )
 
