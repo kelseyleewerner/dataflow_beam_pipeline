@@ -1,5 +1,8 @@
 import argparse
+import pprint
 from google.cloud import pubsub_v1
+
+pp = pprint.PrettyPrinter(indent=4)
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -18,7 +21,7 @@ subscriber_client = pubsub_v1.SubscriberClient()
 subscription = subscriber_client.subscription_path(args.project_id, args.sub_name)
 
 def callback(message):
-    print(message.data)
+    pp.pprint(message.data)
     message.ack()
 
 future = subscriber_client.subscribe(subscription, callback)

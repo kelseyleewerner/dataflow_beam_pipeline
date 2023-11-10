@@ -1,11 +1,32 @@
 import argparse
 import apache_beam as beam
-from apache_beam.io import ReadFromPubSub
+from apache_beam.io import ReadFromPubSub, WriteToPubSub
 from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions, StandardOptions
 from apache_beam.transforms import window
+import json 
 
 
+class countDoFn(beam.DoFn):
+    def process(self, element):
+        return [('count', 1)]        
 
+
+class countFn(beam.CombineFn):
+    def create_accumulator(self):
+        return 0
+    
+    def add_input(self, accumulator, input):
+        accumulator += 1
+        return accumulator
+
+    def merge_accumulators(self, accumulators):
+        total = 0
+        for item in accumulators:
+            total += item
+        return total
+
+    def extract_output(self, accumulator):
+        return accumulator
 
 def run(argv=None, save_main_session=True):
     # Code for parsing command line arguments was copied from https://github.com/apache/beam/blob/master/sdks/python/apache_beam/examples/streaming_wordcount.py
@@ -29,11 +50,15 @@ def run(argv=None, save_main_session=True):
         output = (
             messages
                 | 'DecodeInput' >> beam.Map(lambda x: x.decode('utf-8'))
+                | 'CountMovies' >> beam.ParDo(countDoFn())               
                 | 'CreateWindows' >> beam.WindowInto(window.FixedWindows(15, 0))
+                # | 'CountMovies' >> beam.CombineGlobally(countFn())
+                | 'GroupByMysteryKey' >> beam.GroupByKey()
+                | 'MakeStrings' >> beam.Map(lambda x: json.dumps(x)) 
                 | 'EncodeOutput' >> beam.Map(lambda x: x.encode('utf-8')).with_output_types(bytes)
             )
 
-        output | 'PublishToTopic' >> beam.io.WriteToPubSub(known_args.output_topic)
+        output | 'PublishToTopic' >> WriteToPubSub(known_args.output_topic)
 
 
 if __name__ == '__main__':
