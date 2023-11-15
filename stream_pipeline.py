@@ -8,7 +8,7 @@ import json
 
 class countDoFn(beam.DoFn):
     def process(self, element):
-        return [('count', 1)]        
+        return [('film_count', 1)]        
 
 
 class countFn(beam.CombineFn):
@@ -51,7 +51,7 @@ def run(argv=None, save_main_session=True):
             messages
                 | 'DecodeInput' >> beam.Map(lambda x: x.decode('utf-8'))
                 | 'CountMovies' >> beam.ParDo(countDoFn())               
-                | 'CreateWindows' >> beam.WindowInto(window.FixedWindows(15, 0))
+                | 'CreateWindows' >> beam.WindowInto(window.FixedWindows(5, 0))
                 # | 'CountMovies' >> beam.CombineGlobally(countFn())
                 | 'GroupByKey' >> beam.GroupByKey()
                 | 'TotalMovies' >> beam.Map(lambda x: {x[0]: len(x[1])})                

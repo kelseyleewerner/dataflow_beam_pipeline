@@ -26,11 +26,15 @@ args = parser.parse_args()
 publisher = pubsub_v1.PublisherClient()
 topic_path = publisher.topic_path(args.project_id, args.topic)
 
+# count = 0
+
 # Each line of the csv is published as a dictionary where the keys are the column names
 with open(args.infile, mode="r") as infile:
     messages = csv.DictReader(infile)
 
     for message in messages:
+        # count += 1
+        # print(F"COUNT: {count}")
         future = publisher.publish(topic_path, json.dumps(message).encode("utf-8"))
         # print(future.result())
         future.result()
