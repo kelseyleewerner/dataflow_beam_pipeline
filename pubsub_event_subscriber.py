@@ -1,5 +1,7 @@
 import argparse
+import json
 import pprint
+from datetime import datetime
 from google.cloud import pubsub_v1
 
 pp = pprint.PrettyPrinter(indent=4)
@@ -26,14 +28,16 @@ class MessageCount:
 
     def callback(self, message):
         msg = message.data.decode('utf-8')
-        msg = msg.split(' ')[-1]
-        msg = msg.split('}')[0]
-        msg_count = int(msg)
+        msg_obj = json.loads(msg)
+        msg_count = msg_obj['film_count']
 
         self.total_count += msg_count
 
+        print("Original Message:")
         pp.pprint(message.data)
-        print(F"FINAL TOTAL FINAL TOTAL FINAL TOTAL FINAL TOTAL FINAL TOTAL FINAL TOTAL: {self.total_count}")    
+        print(F"Message Count: {msg_count}")
+        print(F"Timestamp: {datetime.fromtimestamp(msg_obj['timestamp']).strftime('%Y-%m-%d %H:%M:%S')}")
+        print(F"RUNNING TOTAL: {self.total_count}")    
 
         message.ack()
         

@@ -3,7 +3,8 @@ import apache_beam as beam
 from apache_beam.io import ReadFromPubSub, WriteToPubSub
 from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions, StandardOptions
 from apache_beam.transforms import window
-import json 
+import json
+import time
 
 
 class countDoFn(beam.DoFn):
@@ -50,11 +51,11 @@ def run(argv=None, save_main_session=True):
         output = (
             messages
                 | 'DecodeInput' >> beam.Map(lambda x: x.decode('utf-8'))
-                | 'CountMovies' >> beam.ParDo(countDoFn())               
-                | 'CreateWindows' >> beam.WindowInto(window.FixedWindows(5, 0))
+                | 'CountMovies' >> beam.ParDo(countDoFn())
+                | 'CreateWindows' >> beam.WindowInto(window.FixedWindows(15, 0))
                 # | 'CountMovies' >> beam.CombineGlobally(countFn())
                 | 'GroupByKey' >> beam.GroupByKey()
-                | 'TotalMovies' >> beam.Map(lambda x: {x[0]: len(x[1])})                
+                | 'TotalMovies' >> beam.Map(lambda x: {x[0]: len(x[1]), 'timestamp': time.time()})       
                 | 'MakeStrings' >> beam.Map(lambda x: json.dumps(x))
                 | 'EncodeOutput' >> beam.Map(lambda x: x.encode('utf-8')).with_output_types(bytes)
             )
