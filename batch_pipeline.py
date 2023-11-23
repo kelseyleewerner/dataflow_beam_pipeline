@@ -1,10 +1,12 @@
 import apache_beam as beam
 from apache_beam.io import WriteToText
 from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
+from datetime import datetime
+from google.cloud import logging
 import argparse
 import codecs
 import csv
-from datetime import datetime
+
 
 
 
@@ -34,7 +36,7 @@ def convert_str_to_date(date_value):
 
 
 class FilterFlightDataDoFn(beam.DoFn):
-    def process(self, element, convert_date):
+    def process(self, element, convert_date):        
         filtered_element = {
             'age': int(element['Age']),
             'departure_date': convert_date(element['Departure Date']),
@@ -180,6 +182,11 @@ def run(argv=None, save_main_session=True):
       dest='end',
       default='12/29/2022',
       help='Date range cannot end after Dec 30, 2022 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')
+    parser.add_argument(
+      '--log-name',
+      dest='log_name',
+      required=True,
+      help='Destination for log output.')      
     known_args, pipeline_args = parser.parse_known_args(argv)
     pipeline_options = PipelineOptions(pipeline_args)
     pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
@@ -187,22 +194,63 @@ def run(argv=None, save_main_session=True):
     start_date = convert_str_to_date(known_args.start)
     end_date = convert_str_to_date(known_args.end)
 
+    logging_client = logging.Client()
+    logger = logging_client.logger(known_args.log_name)
+    logger.log_text("Starting airline dataset batch pipeline", severity="INFO")
+
     # Start moving data through beam pipeline
     with beam.Pipeline(options=pipeline_options) as p:
-        rows = p | 'ReadCSV' >> beam.Create(read_csv_file(known_args.input))
-        output = (
-            rows 
-                # Map Pipeline Section           
-                | 'FilterFlightData' >> beam.ParDo(FilterFlightDataDoFn(), convert_str_to_date)
-                | 'FlightsByDate' >> beam.ParDo(FlightsByDateDoFn(), start_date, end_date)
-                # Shuffle Pipeline Section
-                | 'GroupByFlightStatus' >> beam.GroupBy(lambda item: item['flight_status'])
-                # Reduce Pipeline Section
-                | 'CombineAgeAndArrAirport' >> beam.CombineValues(CombineAgeAndArrAirportFn())
-                | 'CombineForGreatestArrAirport' >> beam.CombinePerKey(CombineForGreatestArrAirportFn())
+        try:
+            rows = p | 'ReadCSV' >> beam.Create(read_csv_file(known_args.input))
+        except BaseException as err:
+            logger.log_struct(
+                {
+                    "message": "Error occurred while reading pipeline input from file",
+                    "error_type": F"{type(err)}",
+                    "error_body": F"{err}"
+                },
+                severity="ERROR"
             )
+            raise
+        
+        try:
+            output = (
+                rows 
+                    # Map Pipeline Section   
+                    | 'FilterFlightData' >> beam.ParDo(FilterFlightDataDoFn(), convert_str_to_date)
+                    | 'FlightsByDate' >> beam.ParDo(FlightsByDateDoFn(), start_date, end_date)
+                    # Shuffle Pipeline Section
+                    | 'GroupByFlightStatus' >> beam.GroupBy(lambda item: item['flight_status'])
+                    # Reduce Pipeline Section
+                    | 'CombineAgeAndArrAirport' >> beam.CombineValues(CombineAgeAndArrAirportFn())
+                    | 'CombineForGreatestArrAirport' >> beam.CombinePerKey(CombineForGreatestArrAirportFn())
+                )
+        except BaseException as err:
+            logger.log_struct(
+                {
+                    "message": "Error occurred while executing body of pipeline",
+                    "error_type": F"{type(err)}",
+                    "error_body": F"{err}"
+                },
+                severity="ERROR"
+            )
+            raise
 
-        output | 'Write' >> WriteToText(known_args.output)
+        try:
+            output | 'Write' >> WriteToText(known_args.output)
+        except BaseException as err:
+            logger.log_struct(
+                {
+                    "message": "Error occurred while writing pipeline output to file",
+                    "error_type": F"{type(err)}",
+                    "error_body": F"{err}"
+                },
+                severity="ERROR"
+            )
+            raise
+
+
+    logger.log_text("Ending airline dataset batch pipeline", severity="INFO")
 
 
 if __name__ == '__main__':

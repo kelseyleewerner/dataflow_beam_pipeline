@@ -12,23 +12,6 @@ class countDoFn(beam.DoFn):
         return [('film_count', 1)]        
 
 
-class countFn(beam.CombineFn):
-    def create_accumulator(self):
-        return 0
-    
-    def add_input(self, accumulator, input):
-        accumulator += 1
-        return accumulator
-
-    def merge_accumulators(self, accumulators):
-        total = 0
-        for item in accumulators:
-            total += item
-        return total
-
-    def extract_output(self, accumulator):
-        return accumulator
-
 def run(argv=None, save_main_session=True):
     # Code for parsing command line arguments was copied from https://github.com/apache/beam/blob/master/sdks/python/apache_beam/examples/streaming_wordcount.py
     parser = argparse.ArgumentParser()
@@ -53,7 +36,6 @@ def run(argv=None, save_main_session=True):
                 | 'DecodeInput' >> beam.Map(lambda x: x.decode('utf-8'))
                 | 'CountMovies' >> beam.ParDo(countDoFn())
                 | 'CreateWindows' >> beam.WindowInto(window.FixedWindows(15, 0))
-                # | 'CountMovies' >> beam.CombineGlobally(countFn())
                 | 'GroupByKey' >> beam.GroupByKey()
                 | 'TotalMovies' >> beam.Map(lambda x: {x[0]: len(x[1]), 'timestamp': time.time()})       
                 | 'MakeStrings' >> beam.Map(lambda x: json.dumps(x))
