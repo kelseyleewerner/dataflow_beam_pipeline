@@ -1,12 +1,12 @@
 import apache_beam as beam
-from apache_beam.io import WriteToText
-from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
-from datetime import datetime
-from google.cloud import logging
 import argparse
 import codecs
 import csv
 import traceback
+from apache_beam.io import WriteToText
+from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
+from datetime import datetime
+from google.cloud import logging
 
 
 # import pprint
