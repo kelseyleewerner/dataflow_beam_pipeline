@@ -6,14 +6,21 @@ from google.cloud import logging
 import argparse
 import codecs
 import csv
-
-
-
+import traceback
 
 # import pprint
 # pp = pprint.PrettyPrinter(indent=4)
 
+LOG_NAME = "airline_dataset"
 
+def log_error(log, err_message):
+    log.log_struct(
+        {
+            "message": err_message,
+            "error": traceback.format_exc()
+        },
+        severity="ERROR"
+    )
 
 # Code for reading in a CSV from a Cloud Storage bucket as text and return an iterable that can be consumed by 
 #   a Beam PTransform was copied from the following sources:
@@ -21,198 +28,254 @@ import csv
 # https://stackoverflow.com/questions/58500594/open-file-in-beam-io-filebasedsource-issue-with-python-3
 # https://stackoverflow.com/questions/29383475/how-to-create-dict-using-csv-file-with-first-row-as-keys
 def read_csv_file(file_path):
-  with beam.io.filesystems.FileSystems.open(file_path, mime_type='text/plain') as infile:
-    for row in csv.DictReader(codecs.iterdecode(infile, "utf-8")):
-        yield row
+    try:    
+        with beam.io.filesystems.FileSystems.open(file_path, mime_type='text/plain') as infile:
+            for row in csv.DictReader(codecs.iterdecode(infile, "utf-8")):
+                yield row
+    except:
+        logging_client = logging.Client()
+        logger = logging_client.logger(LOG_NAME)
+        log_error(logger, "Error occurred while reading from CSV")        
 
 
 def convert_str_to_date(date_value):
-    if '/' in date_value:
-        date_format = '%m/%d/%Y'
-    else:
-        date_format = '%m-%d-%Y'
+    try:
+        if '/' in date_value:
+            date_format = '%m/%d/%Y'
+        else:
+            date_format = '%m-%d-%Y'
 
-    return datetime.strptime(date_value, date_format)
+        return datetime.strptime(date_value, date_format)
+    except:
+        logging_client = logging.Client()
+        logger = logging_client.logger(LOG_NAME)
+        log_error(logger, "Error occurred while formatting date")
+        raise
 
 
 class FilterFlightDataDoFn(beam.DoFn):
-    def process(self, element, convert_date):        
-        filtered_element = {
-            'age': int(element['Age']),
-            'departure_date': convert_date(element['Departure Date']),
-            'arrival_airport': element['Arrival Airport'],
-            'flight_status': element['Flight Status']
-        }
+    logging_client = logging.Client()
+    logger = logging_client.logger(LOG_NAME)
+    
+    def process(self, element, convert_date):
+        try:
+            filtered_element = {
+                'age': int(element['Age']),
+                'departure_date': convert_date(element['Departure Date']),
+                'arrival_airport': element['Arrival Airport'],
+                'flight_status': element['Flight Status']
+            }
+        except:
+            log_error(self.logger, "Error occurred while filtering flight data into desired format")
+            raise
         
         return([filtered_element])
 
 
 class FlightsByDateDoFn(beam.DoFn):
+    logging_client = logging.Client()
+    logger = logging_client.logger(LOG_NAME)
+    
     def process(self, element, start_date, end_date):
-        if element['departure_date'] >= start_date and element['departure_date'] <= end_date:
-            return([element])
-        else:
-            return([])
+        try:
+            if element['departure_date'] >= start_date and element['departure_date'] <= end_date:
+                return([element])
+            else:
+                return([])
+        except:
+            log_error(self.logger, "Error occurred while filtering flight data according to date range")
+            raise
 
 
 class CombineAgeAndArrAirportFn(beam.CombineFn):
-    def create_accumulator(self):
-        return {
-            'total_age': 0,
-            'age_count': 0,
-            'airport_codes': {}
-        }
+    logging_client = logging.Client()
+    logger = logging_client.logger(LOG_NAME)
+
+    def create_accumulator(self):        
+        try:
+            return {
+                'total_age': 0,
+                'age_count': 0,
+                'airport_codes': {}
+            }
+        except:
+            log_error(self.logger, "Error occurred while creating accumulator for combining ages and arrival airports")
+            raise
 
     def add_input(self, accumulator, input):
-        accumulator['total_age'] += input['age']
-        accumulator['age_count'] += 1
-        arrival_airport = input['arrival_airport']
-        
-        if arrival_airport not in accumulator['airport_codes']:
-            accumulator['airport_codes'][arrival_airport] = 0
-        accumulator['airport_codes'][arrival_airport] += 1
+        try:
+            accumulator['total_age'] += input['age']
+            accumulator['age_count'] += 1
+            arrival_airport = input['arrival_airport']
+            
+            if arrival_airport not in accumulator['airport_codes']:
+                accumulator['airport_codes'][arrival_airport] = 0
+            accumulator['airport_codes'][arrival_airport] += 1
 
-        return accumulator
+            return accumulator
+        except:
+            log_error(self.logger, "Error occurred while counting ages and arrival airports")
+            raise
 
     def merge_accumulators(self, accumulators):
-        merged = {
-            'total_age': 0,
-            'age_count': 0,
-            'airport_codes': {}
-        }
+        try:
+            merged = {
+                'total_age': 0,
+                'age_count': 0,
+                'airport_codes': {}
+            }
 
-        for accum in accumulators:
-            merged['total_age'] += accum['total_age']
-            merged['age_count'] += accum['age_count']
-            
-            for arrival_airport, count in accum['airport_codes'].items():
-                if arrival_airport not in merged['airport_codes']:
-                    merged['airport_codes'][arrival_airport] = 0
-                merged['airport_codes'][arrival_airport] += count
+            for accum in accumulators:
+                merged['total_age'] += accum['total_age']
+                merged['age_count'] += accum['age_count']
+                
+                for arrival_airport, count in accum['airport_codes'].items():
+                    if arrival_airport not in merged['airport_codes']:
+                        merged['airport_codes'][arrival_airport] = 0
+                    merged['airport_codes'][arrival_airport] += count
 
-        return merged
+            return merged
+        except:
+            log_error(self.logger, "Error occurred while merging age and arrival airport data")
+            raise
 
     def extract_output(self, accumulator):
-        results = {
-            'average_age': accumulator['total_age'] / accumulator['age_count'],
-            'airport_codes': accumulator['airport_codes']
-        }
+        try:
+            results = {
+                'average_age': accumulator['total_age'] / accumulator['age_count'],
+                'airport_codes': accumulator['airport_codes']
+            }
 
-        return results
+            return results
+        except:
+            log_error(self.logger, "Error occurred while preparing output of average age and most common arrival airport")
+            raise
 
 
 class CombineForGreatestArrAirportFn(beam.CombineFn):
+    logging_client = logging.Client()
+    logger = logging_client.logger(LOG_NAME)
+    
     def create_accumulator(self):
-        return {
-            'average_age': 0,
-            'greatest_airport_count': 0,
-            'airport_counts': {}
-        }      
+        try:
+            return {
+                'average_age': 0,
+                'greatest_airport_count': 0,
+                'airport_counts': {}
+            }      
+        except:
+            log_error(self.logger, "Error occurred while creating accumulator for arrival airports")
+            raise
 
     def add_input(self, accumulator, input):
-        accumulator['average_age'] = input['average_age']
+        try:
+            accumulator['average_age'] = input['average_age']
 
-        for arrival_airport, count in input['airport_codes'].items():
-            # there is no airport with a code of '0', so any entries with this arrival airport code aren't included in the final count
-            if arrival_airport == '0':
-                continue
+            for arrival_airport, count in input['airport_codes'].items():
+                # there is no airport with a code of '0', so any entries with this arrival airport code aren't included in the final count
+                if arrival_airport == '0':
+                    continue
 
-            if count > accumulator['greatest_airport_count']:
-                accumulator['greatest_airport_count'] = count
+                if count > accumulator['greatest_airport_count']:
+                    accumulator['greatest_airport_count'] = count
 
-            if count not in accumulator['airport_counts']:
-                accumulator['airport_counts'][count] = []
-            accumulator['airport_counts'][count].append(arrival_airport)
-        
-        return accumulator
+                if count not in accumulator['airport_counts']:
+                    accumulator['airport_counts'][count] = []
+                accumulator['airport_counts'][count].append(arrival_airport)
+            
+            return accumulator
+        except:
+            log_error(self.logger, "Error occurred while determining the most common arrival airports")
+            raise
 
     def merge_accumulators(self, accumulators):
-        merged = {
-            'average_age': 0,
-            'greatest_airport_count': 0,
-            'airport_counts': {}
-        }
+        try:
+            merged = {
+                'average_age': 0,
+                'greatest_airport_count': 0,
+                'airport_counts': {}
+            }
 
-        # there should only be one accumulator but still writing this portion as if there could be multiple accumulators
-        for accum in accumulators:
-            merged['average_age'] = accum['average_age']
-            
-            if accum['greatest_airport_count'] > merged['greatest_airport_count']:
-                merged['greatest_airport_count'] = accum['greatest_airport_count']
-            
-            for count in accum['airport_counts'].keys():
-                if count not in merged['airport_counts']:
-                    merged['airport_counts'][count] = []
-                merged['airport_counts'][count] += accum['airport_counts'][count]
+            # there should only be one accumulator but still writing this portion as if there could be multiple accumulators
+            for accum in accumulators:
+                merged['average_age'] = accum['average_age']
+                
+                if accum['greatest_airport_count'] > merged['greatest_airport_count']:
+                    merged['greatest_airport_count'] = accum['greatest_airport_count']
+                
+                for count in accum['airport_counts'].keys():
+                    if count not in merged['airport_counts']:
+                        merged['airport_counts'][count] = []
+                    merged['airport_counts'][count] += accum['airport_counts'][count]
 
-        return merged
+            return merged
+        except:
+            log_error(self.logger, "Error occurred while merging most common arrival airport data")
+            raise
 
     def extract_output(self, accumulator):
-        results = {
-            'average_age': accumulator['average_age'],
-            'most_common_airport_count': accumulator['greatest_airport_count'],
-            'most_common_airports': accumulator['airport_counts'][accumulator['greatest_airport_count']]
-        }
+        try:
+            results = {
+                'average_age': accumulator['average_age'],
+                'most_common_airport_count': accumulator['greatest_airport_count'],
+                'most_common_airports': accumulator['airport_counts'][accumulator['greatest_airport_count']]
+            }
 
-        return results
-
+            return results
+        except:
+            log_error(self.logger, "Error occurred while preparing output of most common arrival airport")
+            raise            
+        
 
 def run(argv=None, save_main_session=True):
-    # Code for parsing command line arguments was copied from https://github.com/apache/beam/blob/master/sdks/python/apache_beam/examples/wordcount.py
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-      '--input',
-      dest='input',
-      required=True,
-      help='Input file to process.')
-    parser.add_argument(
-      '--output',
-      dest='output',
-      required=True,
-      help='Output file to write results to.')
-    # Date range defaults to 09/01/2022 - 12/29/2022 if not given as command line arguments
-    # Validating the --start and --end command line arguments provided from the user is left as a future enhancement
-    parser.add_argument(
-      '--start',
-      dest='start',
-      default='09/01/2022',
-      help='Date range cannot start earlier than Jan 1, 2022 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')
-    parser.add_argument(
-      '--end',
-      dest='end',
-      default='12/29/2022',
-      help='Date range cannot end after Dec 30, 2022 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')
-    parser.add_argument(
-      '--log-name',
-      dest='log_name',
-      required=True,
-      help='Destination for log output.')      
-    known_args, pipeline_args = parser.parse_known_args(argv)
-    pipeline_options = PipelineOptions(pipeline_args)
-    pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
+    logging_client = logging.Client()
+    logger = logging_client.logger(LOG_NAME)
+
+    try:
+        # Code for parsing command line arguments was copied from https://github.com/apache/beam/blob/master/sdks/python/apache_beam/examples/wordcount.py
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+        '--input',
+        dest='input',
+        required=True,
+        help='Input file to process.')
+        parser.add_argument(
+        '--output',
+        dest='output',
+        required=True,
+        help='Output file to write results to.')
+        # Date range defaults to 09/01/2022 - 12/29/2022 if not given as command line arguments
+        # Validating the --start and --end command line arguments provided from the user is left as a future enhancement
+        parser.add_argument(
+        '--start',
+        dest='start',
+        default='09/01/2022',
+        help='Date range cannot start earlier than Jan 1, 2022 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')
+        parser.add_argument(
+        '--end',
+        dest='end',
+        default='12/29/2022',
+        help='Date range cannot end after Dec 30, 2022 and must be in the format mm/dd/yyyy or mm-dd-yyyy.')  
+        known_args, pipeline_args = parser.parse_known_args(argv)
+        pipeline_options = PipelineOptions(pipeline_args)
+        pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
+    except:
+        log_error(logger, "Error occurred while parsing command line arguments")
+        raise        
+
+    logger.log_text("Starting airline dataset batch pipeline", severity="INFO")
 
     start_date = convert_str_to_date(known_args.start)
     end_date = convert_str_to_date(known_args.end)
-
-    logging_client = logging.Client()
-    logger = logging_client.logger(known_args.log_name)
-    logger.log_text("Starting airline dataset batch pipeline", severity="INFO")
-
+    
     # Start moving data through beam pipeline
     with beam.Pipeline(options=pipeline_options) as p:
         try:
             rows = p | 'ReadCSV' >> beam.Create(read_csv_file(known_args.input))
-        except BaseException as err:
-            logger.log_struct(
-                {
-                    "message": "Error occurred while reading pipeline input from file",
-                    "error_type": F"{type(err)}",
-                    "error_body": F"{err}"
-                },
-                severity="ERROR"
-            )
+        except:
+            log_error(logger, "Error occurred while reading pipeline input from file")
             raise
-        
+
         try:
             output = (
                 rows 
@@ -225,30 +288,15 @@ def run(argv=None, save_main_session=True):
                     | 'CombineAgeAndArrAirport' >> beam.CombineValues(CombineAgeAndArrAirportFn())
                     | 'CombineForGreatestArrAirport' >> beam.CombinePerKey(CombineForGreatestArrAirportFn())
                 )
-        except BaseException as err:
-            logger.log_struct(
-                {
-                    "message": "Error occurred while executing body of pipeline",
-                    "error_type": F"{type(err)}",
-                    "error_body": F"{err}"
-                },
-                severity="ERROR"
-            )
+        except:
+            log_error(logger, "Error occurred while executing body of pipeline")
             raise
 
         try:
             output | 'Write' >> WriteToText(known_args.output)
-        except BaseException as err:
-            logger.log_struct(
-                {
-                    "message": "Error occurred while writing pipeline output to file",
-                    "error_type": F"{type(err)}",
-                    "error_body": F"{err}"
-                },
-                severity="ERROR"
-            )
+        except:
+            log_error(logger, "Error occurred while writing pipeline output to file")
             raise
-
 
     logger.log_text("Ending airline dataset batch pipeline", severity="INFO")
 

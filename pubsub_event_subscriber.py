@@ -2,7 +2,7 @@ import argparse
 import json
 import pprint
 from datetime import datetime
-from google.cloud import pubsub_v1
+from google.cloud import logging, pubsub_v1
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -13,6 +13,12 @@ parser.add_argument(
 parser.add_argument(
     "--sub-name",
     dest="sub_name")
+parser.add_argument(
+    "--sub-name",
+    dest="sub_name")
+parser.add_argument(
+      '--log-name',
+      dest='log_name')     
 args = parser.parse_args()
 
 # Code created from this example: 
