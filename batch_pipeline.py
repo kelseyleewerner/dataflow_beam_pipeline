@@ -8,8 +8,10 @@ import codecs
 import csv
 import traceback
 
+
 # import pprint
 # pp = pprint.PrettyPrinter(indent=4)
+
 
 LOG_NAME = "airline_dataset"
 
@@ -21,6 +23,7 @@ def log_error(log, err_message):
         },
         severity="ERROR"
     )
+
 
 # Code for reading in a CSV from a Cloud Storage bucket as text and return an iterable that can be consumed by 
 #   a Beam PTransform was copied from the following sources:
@@ -53,10 +56,7 @@ def convert_str_to_date(date_value):
         raise
 
 
-class FilterFlightDataDoFn(beam.DoFn):
-    logging_client = logging.Client()
-    logger = logging_client.logger(LOG_NAME)
-    
+class FilterFlightDataDoFn(beam.DoFn):    
     def process(self, element, convert_date):
         try:
             filtered_element = {
@@ -66,16 +66,15 @@ class FilterFlightDataDoFn(beam.DoFn):
                 'flight_status': element['Flight Status']
             }
         except:
-            log_error(self.logger, "Error occurred while filtering flight data into desired format")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while filtering flight data into desired format")
             raise
         
         return([filtered_element])
 
 
 class FlightsByDateDoFn(beam.DoFn):
-    logging_client = logging.Client()
-    logger = logging_client.logger(LOG_NAME)
-    
     def process(self, element, start_date, end_date):
         try:
             if element['departure_date'] >= start_date and element['departure_date'] <= end_date:
@@ -83,14 +82,13 @@ class FlightsByDateDoFn(beam.DoFn):
             else:
                 return([])
         except:
-            log_error(self.logger, "Error occurred while filtering flight data according to date range")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while filtering flight data according to date range")
             raise
 
 
 class CombineAgeAndArrAirportFn(beam.CombineFn):
-    logging_client = logging.Client()
-    logger = logging_client.logger(LOG_NAME)
-
     def create_accumulator(self):        
         try:
             return {
@@ -99,7 +97,9 @@ class CombineAgeAndArrAirportFn(beam.CombineFn):
                 'airport_codes': {}
             }
         except:
-            log_error(self.logger, "Error occurred while creating accumulator for combining ages and arrival airports")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while creating accumulator for combining ages and arrival airports")
             raise
 
     def add_input(self, accumulator, input):
@@ -114,7 +114,9 @@ class CombineAgeAndArrAirportFn(beam.CombineFn):
 
             return accumulator
         except:
-            log_error(self.logger, "Error occurred while counting ages and arrival airports")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while counting ages and arrival airports")
             raise
 
     def merge_accumulators(self, accumulators):
@@ -136,7 +138,9 @@ class CombineAgeAndArrAirportFn(beam.CombineFn):
 
             return merged
         except:
-            log_error(self.logger, "Error occurred while merging age and arrival airport data")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while merging age and arrival airport data")
             raise
 
     def extract_output(self, accumulator):
@@ -148,14 +152,13 @@ class CombineAgeAndArrAirportFn(beam.CombineFn):
 
             return results
         except:
-            log_error(self.logger, "Error occurred while preparing output of average age and most common arrival airport")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while preparing output of average age and most common arrival airport")
             raise
 
 
 class CombineForGreatestArrAirportFn(beam.CombineFn):
-    logging_client = logging.Client()
-    logger = logging_client.logger(LOG_NAME)
-    
     def create_accumulator(self):
         try:
             return {
@@ -164,7 +167,9 @@ class CombineForGreatestArrAirportFn(beam.CombineFn):
                 'airport_counts': {}
             }      
         except:
-            log_error(self.logger, "Error occurred while creating accumulator for arrival airports")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while creating accumulator for arrival airports")
             raise
 
     def add_input(self, accumulator, input):
@@ -185,7 +190,9 @@ class CombineForGreatestArrAirportFn(beam.CombineFn):
             
             return accumulator
         except:
-            log_error(self.logger, "Error occurred while determining the most common arrival airports")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while determining the most common arrival airports")
             raise
 
     def merge_accumulators(self, accumulators):
@@ -210,7 +217,9 @@ class CombineForGreatestArrAirportFn(beam.CombineFn):
 
             return merged
         except:
-            log_error(self.logger, "Error occurred while merging most common arrival airport data")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while merging most common arrival airport data")
             raise
 
     def extract_output(self, accumulator):
@@ -223,7 +232,9 @@ class CombineForGreatestArrAirportFn(beam.CombineFn):
 
             return results
         except:
-            log_error(self.logger, "Error occurred while preparing output of most common arrival airport")
+            logging_client = logging.Client()
+            logger = logging_client.logger(LOG_NAME)
+            log_error(logger, "Error occurred while preparing output of most common arrival airport")
             raise            
         
 
